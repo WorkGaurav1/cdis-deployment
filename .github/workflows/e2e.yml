@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 # Tests the *published* GHCR images via compose.production.yaml, not a
 # source build — this repo's job is validating that the currently
