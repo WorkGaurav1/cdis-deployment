@@ -1,0 +1,14 @@
+{
+  "name": "cdis-deployment",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Deployment topology, reverse proxy, and end-to-end tests for the CDIS Engineering Template.",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "e2e:up": "./scripts/e2e-up.sh"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
+}

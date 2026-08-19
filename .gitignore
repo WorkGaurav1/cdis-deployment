@@ -1,0 +1,15 @@
+node_modules/
+
+# Real secrets/config — env/production.env.example documents what's needed
+compose/.env
+.env
+
+# Playwright artifacts
+/test-results/
+/playwright-report/
+/blob-report/
+
+# Docker Compose may create this
+compose/*.env.local
+
+.DS_Store
