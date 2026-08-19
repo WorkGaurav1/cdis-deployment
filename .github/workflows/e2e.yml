@@ -1,0 +1,94 @@
+name: E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Tests the *published* GHCR images via compose.production.yaml, not a
+# source build — this repo's job is validating that the currently
+# published frontend and backend, combined with this repo's own
+# reverse-proxy/compose config, actually work together as a real
+# deployed system. Rebuilding from source here would just be a second
+# copy of each app's own CI, not a distinct check.
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # CI-only values — this environment is destroyed at the end of
+      # the job either way. `:latest` here means "whatever each app's
+      # own CI most recently published to main" — the real deployment
+      # model still pins to an explicit commit SHA (see the README).
+      - name: Write compose env
+        working-directory: compose
+        run: |
+          cat > .env.ci <<EOF
+          PUBLIC_ORIGIN=http://localhost
+          DB_PASSWORD=$(openssl rand -hex 24)
+          DB_ROOT_PASSWORD=$(openssl rand -hex 24)
+          JWT_ACCESS_SECRET=$(openssl rand -hex 64)
+          FRONTEND_VERSION=latest
+          BACKEND_VERSION=latest
+          EOF
+
+      - name: Start the stack
+        working-directory: compose
+        run: docker compose -f compose.production.yaml --env-file .env.ci up -d
+
+      - name: Wait for the backend to answer /health
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -sf -m 2 http://localhost/health > /dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::backend never became healthy"
+          exit 1
+
+      - name: Apply migrations and seed data
+        working-directory: compose
+        # -u root: the runtime image's /app is deliberately not
+        # writable by the non-root app user; see README for why the
+        # seed command needs a throwaway .env file at all.
+        run: |
+          docker compose -f compose.production.yaml --env-file .env.ci \
+            exec -u root backend sh -c 'env > .env && npx prisma migrate deploy && npx prisma db seed'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: npx playwright test
+        env:
+          CI: true
+          E2E_BASE_URL: http://localhost
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Show container logs on failure
+        if: failure()
+        working-directory: compose
+        run: docker compose -f compose.production.yaml --env-file .env.ci logs
+
+      - name: Tear down
+        if: always()
+        working-directory: compose
+        run: docker compose -f compose.production.yaml --env-file .env.ci down -v
