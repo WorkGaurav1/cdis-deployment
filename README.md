@@ -68,6 +68,29 @@ This builds both images, starts MySQL + backend + frontend + reverse proxy, wait
 
 To tear down: `docker compose -f compose/compose.yaml down` (add `-v` to also drop the MySQL volume).
 
+**MySQL only applies `MYSQL_PASSWORD`/`MYSQL_ROOT_PASSWORD` when it initializes a brand-new, empty data volume — changing those values in `compose/.env` after the volume already exists does nothing; the database keeps its original credentials.** If you change the DB password and the app starts failing auth against MySQL, that's why — `down -v` (or delete the `cdis_mysql-data` volume directly) and start fresh.
+
+---
+
+## Production stack
+
+Pulls pinned images from GHCR instead of building from source — this is the actual production model (build once in each app's own CI, deploy the resulting artifact everywhere else), never `docker compose ... up --build` on the server itself.
+
+```bash
+cp env/production.env.example compose/.env.production
+# fill in real values, plus FRONTEND_VERSION / BACKEND_VERSION — a specific
+# commit SHA from a successful build in cdis-frontend/cdis-backend's CI,
+# never left unset or pointed at :latest
+
+docker compose -f compose/compose.production.yaml --env-file compose/.env.production up -d
+# first run only: apply migrations + seed (see the .env-file quirk noted
+# above, in "A real quirk worth knowing about")
+docker compose -f compose/compose.production.yaml --env-file compose/.env.production \
+  exec -u root backend sh -c 'env > .env && npx prisma migrate deploy && npx prisma db seed'
+```
+
+Verified for real: pulled the actual GHCR images built by `cdis-backend`/`cdis-frontend`'s CI (not built from source), brought up this exact compose file, ran migrations/seed, then ran the full E2E suite against it — all 10 tests pass against genuinely pulled, pinned artifacts.
+
 ### A real quirk worth knowing about
 
 The backend's seed command (`prisma.config.ts`) hardcodes `tsx --env-file=.env`, which needs a literal `.env` file to exist — even though the container already has every variable it needs via `environment:` in the compose file. `e2e-up.sh` handles this by generating a throwaway `.env` from the container's own environment before seeding. This also has to run as `root`, since the runtime image's `/app` is deliberately not writable by the non-root `app` user the main process runs as.
@@ -92,9 +115,9 @@ Coverage: login (success + wrong-credentials), session persistence across a relo
 
 ## What's not here yet
 
-- `compose.production.yaml` (pinned GHCR image references, not build-from-source)
 - Deploy/rollback scripts and the CD workflow
 - Production server provisioning notes
+- CI for this repo itself (build the stack + run E2E on every push)
 
 These land as the deployment pipeline is built out — see this repo's issues/commits for current status rather than trusting this list to stay current.
 

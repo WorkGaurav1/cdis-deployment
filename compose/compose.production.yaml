@@ -1,0 +1,68 @@
+# Production stack — pulls pinned images from GHCR. Never builds from
+# source (that already happened, once, in each app's own CI) and never
+# depends on `latest`: FRONTEND_VERSION/BACKEND_VERSION must be set
+# explicitly to a real tag (a commit SHA, ideally) so the exact running
+# version is always known and a rollback is just "redeploy the
+# previous value of these two variables."
+#
+# Run: docker compose -f compose/compose.production.yaml up -d
+name: cdis
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: cdis
+      MYSQL_USER: cdis
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD is required}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # No `ports:` — MySQL is reachable only from other containers on
+    # this network, never from the host or the internet.
+
+  backend:
+    image: ghcr.io/workgaurav1/cdis-backend:${BACKEND_VERSION:?BACKEND_VERSION is required — e.g. a commit SHA, never left as :latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      CORS_ORIGIN: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required}
+      DATABASE_URL: mysql://cdis:${DB_PASSWORD}@mysql:3306/cdis?allowPublicKeyRetrieval=true
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+      JWT_ACCESS_EXPIRES_IN: 15m
+      REFRESH_TOKEN_EXPIRES_IN_DAYS: 7
+      BCRYPT_SALT_ROUNDS: 12
+      ACCOUNT_LOCKOUT_MAX_ATTEMPTS: 5
+      ACCOUNT_LOCKOUT_DURATION_MINUTES: 15
+    depends_on:
+      mysql:
+        condition: service_healthy
+    # No `ports:` — only the reverse proxy talks to this, over the
+    # internal Docker network (service name `backend`).
+
+  frontend:
+    image: ghcr.io/workgaurav1/cdis-frontend:${FRONTEND_VERSION:?FRONTEND_VERSION is required — e.g. a commit SHA, never left as :latest}
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  reverse-proxy:
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    volumes:
+      - ../reverse-proxy/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  mysql-data:
