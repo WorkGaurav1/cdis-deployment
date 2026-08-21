@@ -156,6 +156,26 @@ Verified locally: the rendered TLS config (real domain substituted in) passes ng
 
 ---
 
+## Automated deploys (CD)
+
+A push to `main` in `cdis-frontend` or `cdis-backend` that passes CI and publishes an image fires a `repository_dispatch` (`deploy-frontend` / `deploy-backend`) at this repo, carrying the new commit SHA as `client_payload.version`. `.github/workflows/deploy.yml` here picks that up, fills in whichever app *wasn't* just built from `compose/current-versions.env` (so a single app's CI can trigger a deploy without knowing its sibling's version), and runs `scripts/deploy.sh` with the resolved pair.
+
+The job runs on a **self-hosted runner registered on the production server itself** — deliberately, over a GitHub-hosted runner SSHing in: no long-lived SSH private key sits in GitHub secrets, and no inbound SSH access from GitHub's runner IP ranges needs to be opened for this specifically. The runner should run as a low-privilege user that's only a member of the `docker` group.
+
+One-time setup, once the server exists:
+
+1. **Register the runner** — on the server: Settings → Actions → Runners → New self-hosted runner in this repo, follow GitHub's generated `./config.sh` command, then install it as a service (`sudo ./svc.sh install && sudo ./svc.sh start`) so it survives reboots.
+2. **Create a dispatch token** — a fine-grained PAT (Settings → Developer settings → Personal access tokens → Fine-grained) scoped to *only* this repo, with **Contents: Read and write** permission. Add it as a secret named `DEPLOY_DISPATCH_TOKEN` in **both** `cdis-frontend` and `cdis-backend` (same value, same secret name in each).
+3. **Seed `current-versions.env` once** — run `./scripts/deploy.sh <frontend-version> <backend-version>` by hand for the very first deploy. After that, CD keeps it current automatically.
+
+Until the token secret is set, the "Trigger deploy" step in both app repos' CI is a no-op (`if: secrets.DEPLOY_DISPATCH_TOKEN != ''`) — CI stays green with nothing to dispatch to.
+
+A specific version pair can also be deployed manually without waiting for a new commit: Actions → Deploy → Run workflow, with `frontend_version` / `backend_version` inputs (leave one blank to keep whatever's currently live).
+
+Verified: the version-resolution logic (`deploy.yml`'s "Resolve versions" step) was tested standalone against all four real cases — frontend-only dispatch, backend-only dispatch, manual dispatch with both versions, and the first-deploy case with no `current-versions.env` yet (correctly fails with a clear message rather than deploying a blank version). Not yet verified: an actual run against a registered self-hosted runner, since no server exists yet to register one on.
+
+---
+
 ## Testing
 
 The Playwright suite in `e2e/` drives a real browser against whatever's running at `E2E_BASE_URL` (defaults to `http://localhost:8080`, i.e. the local compose stack). It does **not** manage its own environment (no `webServer` orchestration) — bringing up a full multi-container stack with migrations is a separate concern from running tests against it:
@@ -174,8 +194,8 @@ Coverage: login (success + wrong-credentials), session persistence across a relo
 
 ## What's not here yet
 
-- Automated CD (a push to `cdis-frontend`/`cdis-backend`'s `main` automatically triggering a deploy here) — today, `deploy.sh` is run by hand with a specific version pair
 - Real production server (Oracle Cloud Always Free VM not yet created) — everything above is verified locally against genuinely pulled GHCR artifacts, but not yet against a real publicly-reachable host
+- A registered self-hosted runner (needs the server above) — `deploy.yml` is written and its version-resolution logic tested standalone, but not yet run for real
 - Real Let's Encrypt certificate issuance (needs the domain + server above)
 
 These land as the deployment pipeline is built out — see this repo's issues/commits for current status rather than trusting this list to stay current.
