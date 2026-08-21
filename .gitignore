@@ -1,7 +1,9 @@
 node_modules/
 
-# Real secrets/config — env/production.env.example documents what's needed
-compose/.env
+# Real secrets/config — env/production.env.example documents what's needed.
+# The trailing * matters: "compose/.env" alone only matches a file
+# literally named ".env", not ".env.production" or ".env.ci".
+compose/.env*
 .env
 
 # Playwright artifacts
@@ -9,7 +11,9 @@ compose/.env
 /playwright-report/
 /blob-report/
 
-# Docker Compose may create this
-compose/*.env.local
+# Per-server deploy state (which versions are live) — not shared
+# config, genuinely local to whichever machine ran deploy.sh.
+compose/current-versions.env
+compose/previous-versions.env
 
 .DS_Store
