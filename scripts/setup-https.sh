@@ -45,10 +45,10 @@ docker compose -f compose.production.yaml -f compose.https-init.yaml \
   --env-file .env.production --env-file current-versions.env run --rm certbot \
   "certbot certonly --webroot -w /var/www/certbot -d $DOMAIN --email $EMAIL --agree-tos --non-interactive"
 
-echo "==> Certificate obtained. Rendering TLS nginx config for $DOMAIN..."
+echo "==> Certificate obtained. Rendering TLS Apache config for $DOMAIN..."
 DOMAIN="$DOMAIN" envsubst '${DOMAIN}' \
-  < "$DEPLOY_ROOT/reverse-proxy/nginx/nginx.tls.conf.template" \
-  > "$DEPLOY_ROOT/reverse-proxy/nginx/nginx.conf"
+  < "$DEPLOY_ROOT/reverse-proxy/apache/httpd.tls.conf.template" \
+  > "$DEPLOY_ROOT/reverse-proxy/apache/httpd.conf"
 
 echo "==> Switching to steady-state HTTPS stack..."
 DOMAIN="$DOMAIN" docker compose -f compose.production.yaml -f compose.https.yaml \
@@ -73,10 +73,11 @@ fi
 cat <<EOF
 ==> HTTPS is live at https://$DOMAIN
 
-NOTE: reverse-proxy/nginx/nginx.conf on this server now holds the rendered
-TLS config (overwritten from nginx.tls.conf.template). That's expected —
-don't 'git pull' over it without re-running this substitution, and don't
-commit the overwritten file back (it's server-local, DOMAIN-specific).
+NOTE: reverse-proxy/apache/httpd.conf on this server now holds the
+rendered TLS config (overwritten from httpd.tls.conf.template). That's
+expected — don't 'git pull' over it without re-running this
+substitution, and don't commit the overwritten file back (it's
+server-local, DOMAIN-specific).
 
 Renewal (certificates expire after 90 days — run this periodically, e.g.
 monthly via cron):

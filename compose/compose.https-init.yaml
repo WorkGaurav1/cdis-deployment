@@ -1,5 +1,5 @@
 # Bootstrap phase only — used once, by scripts/setup-https.sh, to
-# obtain the very first certificate. The base nginx.conf (HTTP-only)
+# obtain the very first certificate. The base httpd.conf (HTTP-only)
 # already serves /.well-known/acme-challenge/ from this shared volume;
 # certbot writes the challenge response there, Let's Encrypt validates
 # it by hitting this server on port 80, and the resulting cert is

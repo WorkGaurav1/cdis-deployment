@@ -54,10 +54,10 @@ services:
       - backend
 
   reverse-proxy:
-    image: nginx:1.29-alpine
+    image: httpd:2.4-alpine
     restart: unless-stopped
     volumes:
-      - ../reverse-proxy/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../reverse-proxy/apache/httpd.conf:/usr/local/apache2/conf/httpd.conf:ro
     ports:
       - "80:80"
     depends_on:

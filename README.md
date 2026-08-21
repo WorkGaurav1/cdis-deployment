@@ -13,7 +13,7 @@ Deployment topology, reverse proxy, and end-to-end tests for the CDIS Engineerin
 Internet
    │
    ▼
-Reverse Proxy (nginx, single public origin)
+Reverse Proxy (Apache httpd, single public origin)
    ├── /api/*  ──▶  backend container  ──▶  Prisma  ──▶  MySQL
    └── /*      ──▶  frontend container (static build)
 ```
@@ -32,8 +32,8 @@ compose/
 │                               ../cdis-backend and ../cdis-frontend
 └── compose.production.yaml    production stack — pulls pinned GHCR images (WIP)
 
-reverse-proxy/nginx/
-└── nginx.conf                 routing: /api/* -> backend, /* -> frontend
+reverse-proxy/apache/
+└── httpd.conf                 routing: /api/* -> backend, /* -> frontend
 
 scripts/
 └── e2e-up.sh                  builds + starts the stack, runs migrations/seed
@@ -135,11 +135,11 @@ One-time setup, once a domain already resolves to this server's public IP on por
 ./scripts/setup-https.sh cdis.example.com you@example.com
 ```
 
-This brings up the HTTP-only bootstrap stack (`compose.https-init.yaml`), obtains a certificate via `certbot`'s webroot method (Let's Encrypt validates ownership by fetching `http://<domain>/.well-known/acme-challenge/...` from the public internet — the domain has to already be pointed here before this will work), renders `reverse-proxy/nginx/nginx.tls.conf.template` into `reverse-proxy/nginx/nginx.conf` with `envsubst`, and switches to the steady-state TLS stack (`compose.https.yaml`, port 443 + HTTP→HTTPS redirect on port 80).
+This brings up the HTTP-only bootstrap stack (`compose.https-init.yaml`), obtains a certificate via `certbot`'s webroot method (Let's Encrypt validates ownership by fetching `http://<domain>/.well-known/acme-challenge/...` from the public internet — the domain has to already be pointed here before this will work), renders `reverse-proxy/apache/httpd.tls.conf.template` into `reverse-proxy/apache/httpd.conf` with `envsubst`, and switches to the steady-state TLS stack (`compose.https.yaml`, port 443 + HTTP→HTTPS redirect on port 80).
 
-Why `envsubst` on the host rather than nginx's own templating (`/etc/nginx/templates/`): Compose *appends* `volumes:` lists across `-f` files rather than replacing them, so an overlay can't cleanly swap which file is mounted at `/etc/nginx/conf.d/default.conf` — it would end up bind-mounted twice. Rendering on the host and overwriting the one file both stacks already mount sidesteps that entirely.
+Why `envsubst` on the host rather than a container-side templating mechanism: Compose *appends* `volumes:` lists across `-f` files rather than replacing them, so an overlay can't cleanly swap which file is mounted at `/usr/local/apache2/conf/httpd.conf` — it would end up bind-mounted twice. Rendering on the host and overwriting the one file both stacks already mount sidesteps that entirely.
 
-After this runs, `reverse-proxy/nginx/nginx.conf` on the server holds the rendered, domain-specific TLS config — that's expected and server-local; don't `git pull` over it without re-running the substitution.
+After this runs, `reverse-proxy/apache/httpd.conf` on the server holds the rendered, domain-specific TLS config — that's expected and server-local; don't `git pull` over it without re-running the substitution.
 
 Certificates expire after 90 days. Renew periodically (e.g. monthly via cron):
 
@@ -152,7 +152,7 @@ docker compose -f compose/compose.production.yaml -f compose/compose.https.yaml 
   restart reverse-proxy
 ```
 
-Verified locally: the rendered TLS config (real domain substituted in) passes nginx's own `nginx -t` syntax check, and both `compose.https-init.yaml` and `compose.https.yaml` merge cleanly over `compose.production.yaml` with no duplicate or conflicting volume mounts. Real Let's Encrypt issuance is not verified yet — it needs a publicly-reachable domain, which requires the production server to exist first.
+Verified locally: the rendered TLS config (real domain substituted in) passes Apache's own `httpd -t` syntax check, and both `compose.https-init.yaml` and `compose.https.yaml` merge cleanly over `compose.production.yaml` with no duplicate or conflicting volume mounts. Real Let's Encrypt issuance is not verified yet — it needs a publicly-reachable domain, which requires the production server to exist first.
 
 ---
 
@@ -205,5 +205,5 @@ These land as the deployment pipeline is built out — see this repo's issues/co
 ## References
 
 - Docker Compose — https://docs.docker.com/compose/
-- nginx — https://nginx.org/en/docs/
+- Apache httpd (mod_proxy/mod_ssl) — https://httpd.apache.org/docs/2.4/
 - Playwright — https://playwright.dev

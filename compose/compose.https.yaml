@@ -1,7 +1,7 @@
 # Steady-state HTTPS — layer this on top of compose.production.yaml
 # AFTER scripts/setup-https.sh has obtained the first certificate.
-# scripts/setup-https.sh overwrites reverse-proxy/nginx/nginx.conf
-# in place (envsubst'd from nginx.tls.conf.template) rather than
+# scripts/setup-https.sh overwrites reverse-proxy/apache/httpd.conf
+# in place (envsubst'd from httpd.tls.conf.template) rather than
 # swapping which file is mounted — Compose *appends* volume lists
 # across -f files rather than replacing them, so trying to override
 # the base file's config mount here would leave both the bootstrap and
