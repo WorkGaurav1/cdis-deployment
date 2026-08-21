@@ -1,19 +1,30 @@
-# Single public origin fronting both containers — the browser only ever
-# talks to this proxy, never directly to the backend or frontend
-# container. Routing frontend and API under the same origin means the
-# app's own cookies/CORS story stays same-origin (VITE_API_BASE_URL=
-# /api/v1, a relative path) instead of needing cross-origin CORS at all.
+# Steady-state config, used once a certificate already exists (see
+# scripts/setup-https.sh — this replaces the bootstrap nginx.conf after
+# the first successful certbot run). HTTP redirects to HTTPS but still
+# serves ACME challenges directly, so renewals never need downtime.
 server {
     listen 80;
-    server_name _;
+    server_name ${DOMAIN};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name ${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
 
     client_max_body_size 5m;
 
-    # Let's Encrypt's HTTP-01 domain validation hits this path — served
-    # from a volume shared with the certbot container (see
-    # compose.https.yaml). Needed both for the first certificate and
-    # every renewal afterward, so it stays in the base config rather
-    # than only the bootstrap phase.
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
     }
@@ -25,7 +36,6 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        # Cookies (access/refresh/csrf) must pass through untouched.
         proxy_pass_header Set-Cookie;
     }
 

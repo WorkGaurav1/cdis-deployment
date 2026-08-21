@@ -97,6 +97,65 @@ The backend's seed command (`prisma.config.ts`) hardcodes `tsx --env-file=.env`,
 
 ---
 
+## Deploying and rolling back
+
+`scripts/deploy.sh` is the only supported way to change what's running in production — it never rebuilds, it only pulls a specific already-published pair of images:
+
+```bash
+./scripts/deploy.sh <frontend-version> <backend-version>
+# e.g. ./scripts/deploy.sh f144a570a1f9c131259e707b26093022ec18ebfc fc9c6e595645053dc578d7d8f1def79184114c8b
+```
+
+It records what was live before the change (`compose/current-versions.env` → `compose/previous-versions.env`), pulls and starts the requested versions, then polls `${HEALTH_CHECK_URL:-http://localhost}/health` for up to a minute. On failure it exits non-zero and points at rollback rather than leaving a broken deploy running silently.
+
+```bash
+./scripts/rollback.sh   # re-deploys whatever was live immediately before the last deploy.sh run
+```
+
+Both scripts require `compose/.env.production` to already exist (copy `env/production.env.example` once and fill in real secrets — never commit this file, which is why `.gitignore` matches `compose/.env*`).
+
+For an ad-hoc check against any running environment (local, staging, production) without touching deploy state:
+
+```bash
+./scripts/health-check.sh                      # defaults to http://localhost
+./scripts/health-check.sh https://cdis.example.com
+```
+
+It checks backend `/health` (200), frontend `/` (200), and unauthenticated `/api/v1/auth/me` (expects 401 specifically — a 200 there would mean auth is broken open, anything other than 401/200 usually means the backend or DB is down).
+
+A real gotcha hit while testing this: reusing the same `cdis_mysql-data` Docker volume across two test runs with *different* generated `DB_PASSWORD` values fails auth (`P1000`), because the official MySQL image only applies `MYSQL_USER`/`MYSQL_PASSWORD` when initializing a brand-new empty volume — changing the password in `.env.production` later does nothing to an existing volume. Fix: `docker compose -f compose/compose.production.yaml down -v` to wipe the volume before a genuinely fresh start (obviously destructive — never run this against real production data without a backup).
+
+---
+
+## HTTPS
+
+One-time setup, once a domain already resolves to this server's public IP on port 80:
+
+```bash
+./scripts/setup-https.sh cdis.example.com you@example.com
+```
+
+This brings up the HTTP-only bootstrap stack (`compose.https-init.yaml`), obtains a certificate via `certbot`'s webroot method (Let's Encrypt validates ownership by fetching `http://<domain>/.well-known/acme-challenge/...` from the public internet — the domain has to already be pointed here before this will work), renders `reverse-proxy/nginx/nginx.tls.conf.template` into `reverse-proxy/nginx/nginx.conf` with `envsubst`, and switches to the steady-state TLS stack (`compose.https.yaml`, port 443 + HTTP→HTTPS redirect on port 80).
+
+Why `envsubst` on the host rather than nginx's own templating (`/etc/nginx/templates/`): Compose *appends* `volumes:` lists across `-f` files rather than replacing them, so an overlay can't cleanly swap which file is mounted at `/etc/nginx/conf.d/default.conf` — it would end up bind-mounted twice. Rendering on the host and overwriting the one file both stacks already mount sidesteps that entirely.
+
+After this runs, `reverse-proxy/nginx/nginx.conf` on the server holds the rendered, domain-specific TLS config — that's expected and server-local; don't `git pull` over it without re-running the substitution.
+
+Certificates expire after 90 days. Renew periodically (e.g. monthly via cron):
+
+```bash
+docker compose -f compose/compose.production.yaml -f compose/compose.https.yaml \
+  --env-file compose/.env.production --env-file compose/current-versions.env \
+  run --rm certbot certbot renew
+docker compose -f compose/compose.production.yaml -f compose/compose.https.yaml \
+  --env-file compose/.env.production --env-file compose/current-versions.env \
+  restart reverse-proxy
+```
+
+Verified locally: the rendered TLS config (real domain substituted in) passes nginx's own `nginx -t` syntax check, and both `compose.https-init.yaml` and `compose.https.yaml` merge cleanly over `compose.production.yaml` with no duplicate or conflicting volume mounts. Real Let's Encrypt issuance is not verified yet — it needs a publicly-reachable domain, which requires the production server to exist first.
+
+---
+
 ## Testing
 
 The Playwright suite in `e2e/` drives a real browser against whatever's running at `E2E_BASE_URL` (defaults to `http://localhost:8080`, i.e. the local compose stack). It does **not** manage its own environment (no `webServer` orchestration) — bringing up a full multi-container stack with migrations is a separate concern from running tests against it:
@@ -115,9 +174,9 @@ Coverage: login (success + wrong-credentials), session persistence across a relo
 
 ## What's not here yet
 
-- Deploy/rollback scripts and the CD workflow
-- Production server provisioning notes
-- CI for this repo itself (build the stack + run E2E on every push)
+- Automated CD (a push to `cdis-frontend`/`cdis-backend`'s `main` automatically triggering a deploy here) — today, `deploy.sh` is run by hand with a specific version pair
+- Real production server (Oracle Cloud Always Free VM not yet created) — everything above is verified locally against genuinely pulled GHCR artifacts, but not yet against a real publicly-reachable host
+- Real Let's Encrypt certificate issuance (needs the domain + server above)
 
 These land as the deployment pipeline is built out — see this repo's issues/commits for current status rather than trusting this list to stay current.
 

@@ -1,0 +1,21 @@
+# Bootstrap phase only — used once, by scripts/setup-https.sh, to
+# obtain the very first certificate. The base nginx.conf (HTTP-only)
+# already serves /.well-known/acme-challenge/ from this shared volume;
+# certbot writes the challenge response there, Let's Encrypt validates
+# it by hitting this server on port 80, and the resulting cert is
+# written to the certbot-certs volume for compose.https.yaml to use.
+services:
+  reverse-proxy:
+    volumes:
+      - certbot-webroot:/var/www/certbot:ro
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - certbot-webroot:/var/www/certbot
+      - certbot-certs:/etc/letsencrypt
+    entrypoint: ["sh", "-c"]
+
+volumes:
+  certbot-webroot:
+  certbot-certs:
