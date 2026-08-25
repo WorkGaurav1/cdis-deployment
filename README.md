@@ -48,7 +48,7 @@ env/
 
 ## Local verification stack
 
-Requires `cdis-backend` and `cdis-frontend` checked out as **sibling directories** to this repo (`compose.yaml`'s build context is `../../cdis-backend` / `../../cdis-frontend`):
+Requires `cdis-backend` and `cdis-frontend` checked out as **sibling directories** to this repo (`compose.yaml`'s build context defaults to `../../cdis-backend` / `../../cdis-frontend`, overridable via `BACKEND_BUILD_CONTEXT`/`FRONTEND_BUILD_CONTEXT` in `compose/.env`):
 
 ```text
 Projects/
@@ -56,6 +56,8 @@ Projects/
 ├── cdis-frontend/
 └── cdis-deployment/
 ```
+
+Inside the CDIS Template monorepo specifically, this repo's own `compose/.env` sets `BACKEND_BUILD_CONTEXT=../../back-end` / `FRONTEND_BUILD_CONTEXT=../../front-end` instead, so the stack builds from this repo's own `back-end/`/`front-end/` folders rather than needing separate sibling clones. That override lives only in the gitignored `compose/.env`, so this file stays accurate for both contexts.
 
 ```bash
 cp env/production.env.example compose/.env

@@ -29,7 +29,12 @@ services:
 
   backend:
     build:
-      context: ../../cdis-backend
+      # Defaults match the standalone cdis-deployment repo's sibling
+      # layout (../../cdis-backend). The CDIS Template monorepo's
+      # deployment/compose/.env overrides this to ../../back-end,
+      # since there the sibling is this repo's own back-end/ folder,
+      # not a separate cdis-backend clone.
+      context: ${BACKEND_BUILD_CONTEXT:-../../cdis-backend}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -50,7 +55,7 @@ services:
 
   frontend:
     build:
-      context: ../../cdis-frontend
+      context: ${FRONTEND_BUILD_CONTEXT:-../../cdis-frontend}
       args:
         VITE_APP_NAME: CDIS
         VITE_APP_ENV: production

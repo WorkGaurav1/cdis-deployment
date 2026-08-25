@@ -13,12 +13,19 @@ echo "==> Building and starting the stack..."
 docker compose -f compose.yaml up -d --build
 
 echo "==> Waiting for the backend to answer /health..."
+HEALTHY=0
 for _ in $(seq 1 30); do
   if curl -sf -m 2 "http://localhost:8080/health" > /dev/null 2>&1; then
+    HEALTHY=1
     break
   fi
   sleep 2
 done
+
+if [ "$HEALTHY" -ne 1 ]; then
+  echo "==> Backend never became healthy — check: docker compose -f compose.yaml logs" >&2
+  exit 1
+fi
 
 echo "==> Applying migrations and seed data..."
 # Runs as root: the runtime image's /app is intentionally not

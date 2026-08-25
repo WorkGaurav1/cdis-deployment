@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 
 // The reverse proxy fronts both containers on one origin — /api/* is
-// proxied straight to the backend (see reverse-proxy/nginx/nginx.conf).
+// proxied straight to the backend (see reverse-proxy/apache/httpd.conf).
 // There's no separate backend port to reach directly anymore.
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:8080";
 const API_URL = `${BASE_URL}/api/v1`;
