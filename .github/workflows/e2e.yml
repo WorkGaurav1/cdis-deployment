@@ -59,7 +59,7 @@ jobs:
           docker compose -f compose.production.yaml --env-file .env.ci \
             exec -u root backend sh -c 'env > .env && npx prisma migrate deploy && npx prisma db seed'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
