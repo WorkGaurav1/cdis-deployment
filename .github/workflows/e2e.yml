@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # CI-only values — this environment is destroyed at the end of
       # the job either way. `:latest` here means "whatever each app's

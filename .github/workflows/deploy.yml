@@ -26,7 +26,7 @@ jobs:
       # compose/.env.production are gitignored server state that must
       # survive across runs on this persistent, self-hosted runner. A
       # normal checkout's git-clean step would otherwise wipe them.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           clean: false
 
