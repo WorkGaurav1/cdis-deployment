@@ -1,11 +1,34 @@
+# Security updates only — no scheduled version-bump PRs.
+#
+# Same policy as the CDIS Template monorepo (see its
+# docs/standards/security.md#dependency-updates): a dependency is
+# upgraded only when a published advisory affects the version we ship.
+# `open-pull-requests-limit: 0` switches off version updates; security
+# updates are driven by Dependabot alerts (Settings -> Code security)
+# and still open, grouped into a single PR. Docker is absent on purpose:
+# security updates don't cover Docker images, so an entry would only
+# ever produce version bumps.
+#
+# This repo is exported from the monorepo: fix advisories there and
+# re-export (scripts/export-to-repos.sh), so the two never drift.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
